@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String           @id @default(cuid())
+  name        String
+  username    String           @unique
+  password    String
+  role        Role             @default(OPERATOR)
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  operations  Operation[]
+  adjustments CashAdjustment[]
+}
+
+model Operation {
+  id          String         @id @default(cuid())
+  type        OperationType
+  currency    Currency
+  amount      Decimal        @db.Decimal(18, 2)
+  rate        Decimal        @db.Decimal(18, 4)
+  method      PaymentMethod
+  notes       String?
+  profit      Decimal        @db.Decimal(18, 2) @default(0)
+  createdAt   DateTime       @default(now())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id])
+  movements   CashMovement[]
+}
+
+model CashMovement {
+  id           String          @id @default(cuid())
+  currency     Currency
+  amount       Decimal         @db.Decimal(18, 2)
+  type         MovementType
+  description  String?
+  operationId  String?
+  operation    Operation?      @relation(fields: [operationId], references: [id])
+  adjustmentId String?
+  adjustment   CashAdjustment? @relation(fields: [adjustmentId], references: [id])
+  createdAt    DateTime        @default(now())
+}
+
+model CashBalance {
+  id        String   @id @default(cuid())
+  currency  Currency @unique
+  amount    Decimal  @db.Decimal(18, 2) @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model CashAdjustment {
+  id        String        @id @default(cuid())
+  currency  Currency
+  amount    Decimal       @db.Decimal(18, 2)
+  type      MovementType
+  reason    String
+  createdAt DateTime      @default(now())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id])
+  movements CashMovement[]
+}
+
+model ExchangeRate {
+  id        String   @id @default(cuid())
+  currency  Currency @unique
+  buyRate   Decimal  @db.Decimal(18, 4)
+  sellRate  Decimal  @db.Decimal(18, 4)
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+}
+
+enum OperationType {
+  BUY
+  SELL
+}
+
+enum Currency {
+  USD
+  ARS
+  USDT
+  EUR
+  BRL
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+}
+
+enum MovementType {
+  IN
+  OUT
+  ADJUSTMENT
+}
