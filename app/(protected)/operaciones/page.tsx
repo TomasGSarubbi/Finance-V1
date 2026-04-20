@@ -6,6 +6,9 @@ import {
   ArrowUpRight,
   Plus,
   RefreshCw,
+  ChevronRight,
+  Search,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ToastContainer } from "@/components/ui/toast";
@@ -46,6 +55,17 @@ interface ExchangeRate {
   currency: string;
   buyRate: string;
   sellRate: string;
+}
+
+interface ProviderBalance {
+  currency: string;
+  amount: string;
+}
+
+interface Provider {
+  id: string;
+  name: string;
+  balances: ProviderBalance[];
 }
 
 const CURRENCIES = ["USD", "USDT", "EUR", "BRL"];
@@ -116,6 +136,9 @@ function OperationRow({ op }: { op: Operation }) {
 export default function OperacionesPage() {
   const [operations, setOperations] = useState<Operation[]>([]);
   const [rates, setRates] = useState<ExchangeRate[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [showProviderPicker, setShowProviderPicker] = useState(false);
+  const [providerSearch, setProviderSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [toasts, setToasts] = useState<
@@ -129,6 +152,7 @@ export default function OperacionesPage() {
     rate: "",
     method: "CASH",
     notes: "",
+    providerId: "",
   });
 
   const addToast = (message: string, type: "success" | "error" | "info" = "info") => {
@@ -155,16 +179,19 @@ export default function OperacionesPage() {
 
   const fetchRates = useCallback(async () => {
     const res = await fetch("/api/config/tipos-cambio");
-    if (res.ok) {
-      const data = await res.json();
-      setRates(data);
-    }
+    if (res.ok) setRates(await res.json());
+  }, []);
+
+  const fetchProviders = useCallback(async () => {
+    const res = await fetch("/api/proveedores");
+    if (res.ok) setProviders(await res.json());
   }, []);
 
   useEffect(() => {
     fetchOperations();
     fetchRates();
-  }, [fetchOperations, fetchRates]);
+    fetchProviders();
+  }, [fetchOperations, fetchRates, fetchProviders]);
 
   function applyRate() {
     const rate = rates.find((r) => r.currency === form.currency);
@@ -194,7 +221,8 @@ export default function OperacionesPage() {
 
       if (res.ok) {
         addToast("Operación registrada correctamente", "success");
-        setForm((f) => ({ ...f, amount: "", rate: "", notes: "" }));
+        setForm((f) => ({ ...f, amount: "", rate: "", notes: "", providerId: "" }));
+        fetchProviders();
         fetchOperations();
       } else {
         const data = await res.json();
@@ -331,7 +359,9 @@ export default function OperacionesPage() {
                     <button
                       key={m}
                       type="button"
-                      onClick={() => setForm((f) => ({ ...f, method: m }))}
+                      onClick={() =>
+                        setForm((f) => ({ ...f, method: m, providerId: "" }))
+                      }
                       className={`h-10 rounded-lg border-2 font-medium text-sm transition-all ${
                         form.method === m
                           ? "border-blue-500 bg-blue-50 text-blue-700"
@@ -343,6 +373,46 @@ export default function OperacionesPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Proveedor (solo para transferencia) */}
+              {form.method === "TRANSFER" && (
+                <div className="space-y-1.5">
+                  <Label>Proveedor</Label>
+                  {(() => {
+                    const selected = providers.find((p) => p.id === form.providerId);
+                    const arsBalance = selected?.balances.find((b) => b.currency === "ARS");
+                    const arsAmount = arsBalance ? parseFloat(arsBalance.amount) : 0;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => { setProviderSearch(""); setShowProviderPicker(true); }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border-2 text-sm transition-all ${
+                          selected
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        {selected ? (
+                          <>
+                            <div className="text-left">
+                              <p className="font-semibold text-blue-700">{selected.name}</p>
+                              <p className={`text-xs ${arsAmount >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                                {arsAmount.toLocaleString("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 })}
+                              </p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-blue-400" />
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-gray-400">Elegir proveedor...</span>
+                            <ChevronRight className="h-4 w-4 text-gray-300" />
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* Observaciones */}
               <div className="space-y-1.5">
@@ -401,6 +471,87 @@ export default function OperacionesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Provider picker dialog */}
+      <Dialog open={showProviderPicker} onOpenChange={setShowProviderPicker}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Elegir proveedor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar proveedor..."
+                className="pl-9"
+                value={providerSearch}
+                onChange={(e) => setProviderSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1 max-h-72 overflow-y-auto">
+              {providers.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-6">
+                  No hay proveedores.{" "}
+                  <a href="/proveedores" className="text-blue-600 underline">Agregar uno</a>
+                </p>
+              ) : (() => {
+                const filtered = providers
+                  .filter((p) =>
+                    p.name.toLowerCase().includes(providerSearch.toLowerCase())
+                  )
+                  .sort((a, b) => {
+                    const aARS = parseFloat(a.balances.find((x) => x.currency === "ARS")?.amount ?? "0");
+                    const bARS = parseFloat(b.balances.find((x) => x.currency === "ARS")?.amount ?? "0");
+                    return bARS - aARS;
+                  });
+
+                if (filtered.length === 0)
+                  return <p className="text-center text-sm text-gray-400 py-6">Sin resultados</p>;
+
+                return filtered.map((p) => {
+                  const arsBalance = p.balances.find((b) => b.currency === "ARS");
+                  const arsAmount = arsBalance ? parseFloat(arsBalance.amount) : 0;
+                  const isSelected = form.providerId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setForm((f) => ({ ...f, providerId: isSelected ? "" : p.id }));
+                        setShowProviderPicker(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                        isSelected
+                          ? "border-blue-500 bg-blue-50"
+                          : "border-gray-100 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="font-medium text-gray-800">{p.name}</span>
+                      <span className={`font-semibold tabular-nums ${arsAmount >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                        {arsAmount.toLocaleString("es-AR", {
+                          style: "currency",
+                          currency: "ARS",
+                          minimumFractionDigits: 0,
+                        })}
+                      </span>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+            {form.providerId && (
+              <button
+                type="button"
+                onClick={() => { setForm((f) => ({ ...f, providerId: "" })); setShowProviderPicker(false); }}
+                className="w-full flex items-center justify-center gap-2 py-2 text-sm text-red-500 hover:text-red-600"
+              >
+                <X className="h-3.5 w-3.5" /> Quitar proveedor
+              </button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>

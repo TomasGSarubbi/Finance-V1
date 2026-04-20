@@ -20,18 +20,56 @@ model User {
 }
 
 model Operation {
-  id          String         @id @default(cuid())
-  type        OperationType
+  id                String            @id @default(cuid())
+  type              OperationType
+  currency          Currency
+  amount            Decimal           @db.Decimal(18, 2)
+  rate              Decimal           @db.Decimal(18, 4)
+  method            PaymentMethod
+  notes             String?
+  profit            Decimal           @db.Decimal(18, 2) @default(0)
+  createdAt         DateTime          @default(now())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  movements         CashMovement[]
+  providerId        String?
+  provider          Provider?         @relation(fields: [providerId], references: [id])
+  providerMovements ProviderMovement[]
+}
+
+model Provider {
+  id        String            @id @default(cuid())
+  name      String
+  notes     String?
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  balances  ProviderBalance[]
+  movements ProviderMovement[]
+  operations Operation[]
+}
+
+model ProviderBalance {
+  id         String   @id @default(cuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id])
+  currency   Currency
+  amount     Decimal  @db.Decimal(18, 2) @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([providerId, currency])
+}
+
+model ProviderMovement {
+  id          String     @id @default(cuid())
+  providerId  String
+  provider    Provider   @relation(fields: [providerId], references: [id])
   currency    Currency
-  amount      Decimal        @db.Decimal(18, 2)
-  rate        Decimal        @db.Decimal(18, 4)
-  method      PaymentMethod
-  notes       String?
-  profit      Decimal        @db.Decimal(18, 2) @default(0)
-  createdAt   DateTime       @default(now())
-  userId      String
-  user        User           @relation(fields: [userId], references: [id])
-  movements   CashMovement[]
+  amount      Decimal    @db.Decimal(18, 2)
+  type        MovementType
+  description String?
+  operationId String?
+  operation   Operation? @relation(fields: [operationId], references: [id])
+  createdAt   DateTime   @default(now())
 }
 
 model CashMovement {

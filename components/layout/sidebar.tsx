@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/operaciones", label: "Operaciones", icon: ArrowLeftRight },
   { href: "/caja", label: "Caja", icon: Wallet },
+  { href: "/proveedores", label: "Proveedores", icon: Users },
   { href: "/historial", label: "Historial", icon: History },
   { href: "/config", label: "Config", icon: Settings },
 ];

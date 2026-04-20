@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { type, currency, amount, rate, method, notes } = body;
+    const { type, currency, amount, rate, method, notes, providerId } = body;
 
     if (!type || !currency || !amount || !rate || !method) {
       return NextResponse.json({ error: "Campos requeridos faltantes" }, { status: 400 });
@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
           notes,
           profit,
           userId: session.userId,
+          ...(method === "TRANSFER" && providerId ? { providerId } : {}),
         },
         include: { user: { select: { name: true } } },
       });
@@ -156,6 +157,29 @@ export async function POST(req: NextRequest) {
           where: { currency: "ARS" },
           create: { currency: "ARS", amount: arsAmount },
           update: { amount: { increment: arsAmount } },
+        });
+      }
+
+      if (method === "TRANSFER" && providerId) {
+        // Deduct the ARS amount from the provider's balance
+        const transferCurrency = "ARS";
+        const transferAmount = arsAmount;
+
+        await tx.providerMovement.create({
+          data: {
+            providerId,
+            currency: transferCurrency,
+            amount: transferAmount,
+            type: "OUT",
+            description: `Transferencia op. ${type === "BUY" ? "Compra" : "Venta"} ${currency} @ ${rateNum}`,
+            operationId: operation.id,
+          },
+        });
+
+        await tx.providerBalance.upsert({
+          where: { providerId_currency: { providerId, currency: transferCurrency } },
+          create: { providerId, currency: transferCurrency, amount: -transferAmount },
+          update: { amount: { decrement: transferAmount } },
         });
       }
 
